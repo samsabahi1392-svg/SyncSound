@@ -1,0 +1,26 @@
+import express from 'express';
+import { createServer } from 'node:http';
+import { WebSocketServer, WebSocket } from 'ws';
+import crypto from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const app=express();
+const server=createServer(app);
+const wss=new WebSocketServer({server,path:'/ws',maxPayload:32*1024});
+const rooms=new Map();
+const files=new Map();
+const MAX_BYTES=40*1024*1024;
+const send=(ws,obj)=>{if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(obj));};
+const broadcast=(room,obj)=>{for(const client of room.clients.values())send(client.ws,obj);};
+const publicRoom=room=>({code:room.code,hostId:room.hostId,devices:[...room.clients.values()].map(({id,name,joinedAt})=>({id,name,joinedAt})),track:room.track,playback:room.playback});
+const cleanName=s=>String(s||'Phone').trim().slice(0,32)||'Phone';
+const randomCode=()=>{let c;do{c=String(crypto.randomInt(0,1000000)).padStart(6,'0');}while(rooms.has(c));return c;};
+const clearRoom=room=>{rooms.delete(room.code);if(room.track?.id)files.delete(room.track.id);};
+app.use(express.static(path.join(path.dirname(fileURLToPath(import.meta.url)),'.')));
+app.get('/health',(_,res)=>res.json({ok:true,rooms:rooms.size}));
+app.get('/audio/:id',(req,res)=>{const item=files.get(req.params.id);if(!item)return res.sendStatus(404);res.setHeader('Content-Type',item.mime);res.setHeader('Cache-Control','no-store');res.setHeader('Accept-Ranges','bytes');const range=req.headers.range;if(range){const m=/bytes=(\d+)-(\d*)/.exec(range);if(m){const start=Number(m[1]);const end=m[2]?Math.min(Number(m[2]),item.data.length-1):item.data.length-1;if(start> end||start>=item.data.length){res.setHeader('Content-Range',`bytes */${item.data.length}`);return res.sendStatus(416);}res.status(206);res.setHeader('Content-Range',`bytes ${start}-${end}/${item.data.length}`);res.setHeader('Content-Length',end-start+1);return res.end(item.data.subarray(start,end+1));}}res.setHeader('Content-Length',item.data.length);res.end(item.data);});
+app.post('/api/rooms/:code/audio',express.raw({type:['audio/mpeg','audio/mp3','audio/wav','audio/x-wav','audio/mp4','audio/aac','audio/x-m4a'],limit:MAX_BYTES}), (req,res)=>{const room=rooms.get(req.params.code);if(!room)return res.status(404).json({error:'Room not found'});if(req.headers.authorization!==`Bearer ${room.hostSecret}`)return res.sendStatus(403);if(!Buffer.isBuffer(req.body)||!req.body.length)return res.status(400).json({error:'Missing audio file'});if(req.body.length>MAX_BYTES)return res.status(413).json({error:'File too large'});if(room.track?.id)files.delete(room.track.id);const id=crypto.randomUUID();files.set(id,{data:req.body,mime:req.headers['content-type']});room.track={id,name:String(req.headers['x-track-name']||'Uploaded track').slice(0,120),url:`/audio/${id}`};room.playback={playing:false,position:0,at:Date.now()+1500};broadcast(room,{type:'state',room:publicRoom(room)});res.json({track:room.track});});
+app.use((err,req,res,next)=>{if(err.type==='entity.too.large')return res.status(413).json({error:'Audio exceeds 40 MB'});res.status(400).json({error:'Invalid upload'});});
+wss.on('connection',ws=>{let room=null;let id=null;ws.on('message',raw=>{let msg;try{msg=JSON.parse(raw.toString());}catch{return send(ws,{type:'error',message:'Invalid message'});}if(msg.type==='clock'){return send(ws,{type:'clock',clientSent:msg.clientSent,serverTime:Date.now()});}if(msg.type==='create'){if(room)return;const code=randomCode();id=crypto.randomUUID();const hostSecret=crypto.randomBytes(32).toString('hex');room={code,hostId:id,hostSecret,clients:new Map(),track:null,playback:{playing:false,position:0,at:Date.now()}};room.clients.set(id,{id,name:cleanName(msg.name),ws,joinedAt:Date.now()});rooms.set(code,room);return send(ws,{type:'created',id,code,hostSecret,room:publicRoom(room)});}if(msg.type==='join'){if(room)return;const found=rooms.get(String(msg.code||''));if(!found)return send(ws,{type:'error',message:'Room not found'});if(found.clients.size>=10)return send(ws,{type:'error',message:'Room full (10 devices)'});room=found;id=crypto.randomUUID();room.clients.set(id,{id,name:cleanName(msg.name),ws,joinedAt:Date.now()});send(ws,{type:'joined',id,room:publicRoom(room)});return broadcast(room,{type:'state',room:publicRoom(room)});}if(!room||!id)return send(ws,{type:'error',message:'Join a room first'});if(msg.type==='playback'){if(id!==room.hostId)return send(ws,{type:'error',message:'Host only'});const position=Number(msg.position);if(!Number.isFinite(position)||position<0||position>86400)return;room.playback={playing:!!msg.playing,position,at:Date.now()+1800};broadcast(room,{type:'state',room:publicRoom(room)});}});ws.on('close',()=>{if(!room)return;room.clients.delete(id);if(id===room.hostId){broadcast(room,{type:'closed',message:'Host disconnected; room closed'});for(const client of room.clients.values())client.ws.close();clearRoom(room);}else broadcast(room,{type:'state',room:publicRoom(room)});});});
+const port=Number(process.env.PORT||3000);server.listen(port,'0.0.0.0',()=>console.log(`SyncSound running on http://localhost:${port}`));
