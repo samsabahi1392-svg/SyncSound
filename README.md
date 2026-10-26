@@ -13,3 +13,7 @@ On the receiving phone press **Listen with Microphone**, grant permission, then 
 
 ## Limits
 10 total devices including host. Rooms/audio live in server RAM, so Render restarts erase them. A room can be resumed after transient disconnects while server remains alive. Upload up to 40 MB using HTTP. Browsers may suspend audio in background. Playback synchronization has not been measured on physical phones and <20 ms is not guaranteed. Only upload audio you have rights to distribute.
+
+
+## YouTube integration
+Host can share a public YouTube URL; each participant gets the official privacy-enhanced embedded player and must press Play manually. YouTube audio is not redistributed, decoded, channel-separated, or synchronized. Party mode can show the same video on each phone, but playback may echo. Stereo and Surround modes work only with uploaded audio. Some videos disallow embedding.
