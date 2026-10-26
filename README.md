@@ -1,10 +1,15 @@
-# SyncSound — 10-phone prototype
+# SyncSound — 10 phones, party/stereo/surround + experimental mic calibration
 
-## Phone-only GitHub upload
-1. Extract `SyncSound-Phone-10.zip` using Android Files.
-2. In GitHub repository, choose Add file > Upload files. Upload the four files `index.html`, `app.js`, `server.js`, `package.json` to the repository root. If multi-file selection fails, upload them one at a time.
-3. This is a Node.js server app. GitHub Pages alone cannot run it. Deploy the GitHub repository as a Node web service on a host supporting WebSockets and HTTPS (e.g. Render if its current plan supports your use). Build command `npm install`; start command `npm start`.
-4. Open the deployed HTTPS URL on two phones. One hosts, the other joins with the six-digit code. Tap Enable Audio on both phones, upload a supported audio file on host, then Play.
+## Deploy on Render from your phone
+Extract the ZIP and upload all five files to the **root** of your GitHub SyncSound repository, replacing the old versions. Render build command: `npm install`. Start command: `npm start`. Redeploy the latest commit. Open the HTTPS Render URL on each phone.
+
+## Sound modes
+- **Party:** all connected phones play the same track (mono downmix for stereo files is approximate).
+- **Stereo:** exactly two connected phones, automatically left/right by join order. Playback is blocked if fewer/more than two phones are connected. Stereo uses the left/right source channel; a phone may play that channel on only one physical speaker output depending on its hardware.
+- **Surround:** host assigns front left/right, rear left/right and center. Unassigned phones are silent. Rear positions repeat stereo side material; this is NOT true multichannel surround decoding. Surround positions are shown in the app.
+
+## Experimental microphone calibration
+On the receiving phone press **Listen with Microphone**, grant permission, then on host press **Emit Test Pulse**. The host produces a short 950 Hz tone; receiving phone measures microphone signal amplitude and estimates acoustic arrival time relative to server clock. It offers an offset to apply. This is a rough experiment, not reliable automatic millisecond calibration. Echo cancellation, speaker latency, noise, distance, microphone permissions, and background throttling can all distort measurements. Test in a quiet room at moderate volume. The host must have audio unlocked by tapping Enable Audio. Microphone recordings are processed locally and not uploaded.
 
 ## Limits
-Maximum 10 total phones including host. Server stores rooms and uploaded audio in RAM; a restart erases both. Rooms close when host disconnects. Synchronization is experimental, not measured or guaranteed <20 ms. Playback requires a user tap on each phone. No native Bluetooth discovery. Use only audio you have rights to distribute.
+10 total devices including host. Rooms/audio live in server RAM, so Render restarts erase them. A room can be resumed after transient disconnects while server remains alive. Upload up to 40 MB using HTTP. Browsers may suspend audio in background. Playback synchronization has not been measured on physical phones and <20 ms is not guaranteed. Only upload audio you have rights to distribute.
