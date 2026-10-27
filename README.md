@@ -1,4 +1,5 @@
 # SyncSound — 10 phones, party/stereo/surround + experimental mic calibration
+Use at : https://syncsound-cq1c.onrender.com
 
 ## Deploy on Render from your phone
 Extract the ZIP and upload all five files to the **root** of your GitHub SyncSound repository, replacing the old versions. Render build command: `npm install`. Start command: `npm start`. Redeploy the latest commit. Open the HTTPS Render URL on each phone.
