@@ -13,6 +13,23 @@ ws.onmessage=handleMessage;
 async function handleMessage(e){const msg=JSON.parse(e.data);if(msg.type==='clock'){const recv=Date.now(),rtt=recv-msg.clientSent,estimate=msg.serverTime-(msg.clientSent+recv)/2;clockSamples.push({rtt,estimate});clockSamples.sort((a,b)=>a.rtt-b.rtt);clockSamples=clockSamples.slice(0,12);clockOffset=clockSamples.slice(0,Math.min(4,clockSamples.length)).reduce((s,x)=>s+x.estimate,0)/Math.min(4,clockSamples.length);$('timing').textContent=`Network RTT: ${rtt} ms · Clock estimate: ${Math.round(clockOffset)} ms · Manual offset: ${offset} ms`;return;}
 if(msg.type==='calibration_pulse'){await onCalibrationPulse(msg.at);return;}if(msg.type==='resume_failed'){localStorage.removeItem(sessionKey);id=null;hostSecret=null;room=null;$('room').classList.add('hidden');$('landing').classList.remove('hidden');say(msg.message+'. Create or join a room.');return;}if(msg.type==='error'){say(msg.message);return;}if(msg.type==='closed'){localStorage.removeItem(sessionKey);say(msg.message);stopAudio();$('room').classList.add('hidden');$('landing').classList.remove('hidden');return;}
 if(msg.type==='created'||msg.type==='joined'||msg.type==='resumed'){id=msg.id;if(msg.hostSecret)hostSecret=msg.hostSecret;const code=msg.code||msg.room?.code;localStorage.setItem(sessionKey,JSON.stringify({code,token:msg.token}));if(msg.type==='created')history.replaceState({},'',`?room=${code}`);}if(msg.room){room=msg.room;$('landing').classList.add('hidden');$('room').classList.remove('hidden');render();renderYoutube();await syncPlayback();}}
+$('homeLogo').onclick=()=>{
+  if(room && !confirm(id===room.hostId?'Leave home and close this room for everyone?':'Leave this room and return home?'))return;
+  // Explicitly leave on the server so the old room is not silently resumed.
+  if(room)wsSend({type:'leave'});
+  localStorage.removeItem(sessionKey);
+  history.replaceState({},'',location.pathname);
+  stopAudio();
+  try{document.querySelector('#youtubePlayer iframe')?.remove();}catch{}
+  id=null;hostSecret=null;room=null;buffer=null;lastTrack=null;
+  $('room').classList.add('hidden');$('landing').classList.remove('hidden');
+  $('roomCode').value='';$('file').value='';
+  say('You left the room. Create or join another room.');
+  // Reopen the socket to clear server-side room membership on this connection.
+  clearTimeout(reconnectTimer);clearInterval(clockTimer);
+  if(ws){ws.onclose=null;ws.close();}
+  connect();
+};
 $('host').onclick=()=>wsSend({type:'create',name:$('name').value});$('showJoin').onclick=()=>$('joinForm').classList.toggle('hidden');$('join').onclick=()=>wsSend({type:'join',name:$('name').value,code:$('roomCode').value.trim()});$('copy').onclick=async()=>{const link=`${location.origin}/?room=${room.code}`;try{await navigator.clipboard.writeText(link);say('Join link copied');}catch{say(link);}};
 $('mode').onchange=()=>wsSend({type:'mode',mode:$('mode').value});
 $('pulse').onclick=()=>wsSend({type:'calibration_pulse'});

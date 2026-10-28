@@ -28,6 +28,24 @@ ws.on('message',raw=>{let msg;try{msg=JSON.parse(raw.toString());}catch{return s
 if(msg.type==='create'){if(room)return;const code=randomCode();id=crypto.randomUUID();const hostSecret=crypto.randomBytes(32).toString('hex');const token=crypto.randomBytes(24).toString('hex');room={code,hostId:id,hostSecret,clients:new Map(),track:null,playback:{playing:false,position:0,at:Date.now()},timer:null,mode:"party",assignments:{},youtubeId:null};room.clients.set(id,{id,token,name:cleanName(msg.name),ws,joinedAt:Date.now()});rooms.set(code,room);return send(ws,{type:'created',id,code,hostSecret,token,room:publicRoom(room)});}
 if(msg.type==='resume'){if(room)return;const found=rooms.get(String(msg.code||''));const client=found&&[...found.clients.values()].find(c=>c.token===msg.token);if(!client)return send(ws,{type:'resume_failed',message:'Previous room expired or server restarted'});room=found;id=client.id;if(client.ws&&client.ws!==ws){const old=client.ws;client.ws=ws;old.close();}else client.ws=ws;if(room.timer){clearTimeout(room.timer);room.timer=null;}send(ws,{type:'resumed',id,code:room.code,hostSecret:id===room.hostId?room.hostSecret:null,token:client.token,room:publicRoom(room)});return updateRoom(room);}
 if(msg.type==='join'){if(room)return;const found=rooms.get(String(msg.code||''));if(!found)return send(ws,{type:'error',message:'Room not found'});if(found.clients.size>=10)return send(ws,{type:'error',message:'Room full (10 devices)'});room=found;id=crypto.randomUUID();const token=crypto.randomBytes(24).toString('hex');room.clients.set(id,{id,token,name:cleanName(msg.name),ws,joinedAt:Date.now()});if(room.timer){clearTimeout(room.timer);room.timer=null;}send(ws,{type:'joined',id,token,room:publicRoom(room)});return updateRoom(room);}
+if(msg.type==='leave'){
+  if(!room||!id)return;
+  const oldRoom=room;
+  if(id===oldRoom.hostId){
+    broadcast(oldRoom,{type:'closed',message:'Host left the room'});
+    for(const member of oldRoom.clients.values()){
+      if(member.ws && member.ws!==ws)member.ws.close();
+    }
+    clearRoom(oldRoom);
+  }else{
+    oldRoom.clients.delete(id);
+    delete oldRoom.assignments[id];
+    updateRoom(oldRoom);
+    if(![...oldRoom.clients.values()].some(c=>c.ws?.readyState===WebSocket.OPEN))scheduleCleanup(oldRoom);
+  }
+  room=null;id=null;
+  return send(ws,{type:'left'});
+}
 if(!room||!id)return send(ws,{type:'error',message:'Join a room first'});if(msg.type==='youtube'){if(id!==room.hostId)return send(ws,{type:'error',message:'Host only'});if(msg.videoId!==null&&!/^[A-Za-z0-9_-]{11}$/.test(String(msg.videoId)))return send(ws,{type:'error',message:'Invalid YouTube video ID'});room.youtubeId=msg.videoId;updateRoom(room);return;}
 if(msg.type==='mode'){if(id!==room.hostId)return send(ws,{type:'error',message:'Host only'});if(!['party','stereo','surround'].includes(msg.mode))return;room.mode=msg.mode;room.playback={...room.playback,playing:false,position:0,at:Date.now()};updateRoom(room);return;}
 if(msg.type==='assign'){if(id!==room.hostId)return send(ws,{type:'error',message:'Host only'});if(!room.clients.has(msg.deviceId)||!['left','right','front-left','front-right','rear-left','rear-right','center','off'].includes(msg.channel))return;room.assignments[msg.deviceId]=msg.channel;updateRoom(room);return;}

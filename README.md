@@ -1,5 +1,4 @@
 # SyncSound — 10 phones, party/stereo/surround + experimental mic calibration
-Use at : https://syncsound-cq1c.onrender.com
 
 ## Deploy on Render from your phone
 Extract the ZIP and upload all five files to the **root** of your GitHub SyncSound repository, replacing the old versions. Render build command: `npm install`. Start command: `npm start`. Redeploy the latest commit. Open the HTTPS Render URL on each phone.
@@ -18,3 +17,6 @@ On the receiving phone press **Listen with Microphone**, grant permission, then 
 
 ## YouTube integration
 Host can share a public YouTube URL; each participant gets the official privacy-enhanced embedded player and must press Play manually. YouTube audio is not redistributed, decoded, channel-separated, or synchronized. Party mode can show the same video on each phone, but playback may echo. Stereo and Surround modes work only with uploaded audio. Some videos disallow embedding.
+
+## Home / leave room
+Tap the SyncSound logo at the top to leave your current room and return to the home screen. Leaving as host closes the room for all participants. Leaving as speaker removes only that speaker. The saved reconnect session and room URL are cleared.
